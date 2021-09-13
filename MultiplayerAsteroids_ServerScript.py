@@ -16,8 +16,6 @@ def connectionLoop():
 
         byteArr, addr = serverSocket.recvfrom(1024)
 
-        #print(byteArr)    
-
         data = json.loads(byteArr.decode())
 
         if data['command'] == 1:
@@ -103,10 +101,7 @@ def connectionLoop():
 
             del clients[data['netID']]
 
-    
         threadLock.release()
-
-
 
 if __name__ == "__main__":
 
