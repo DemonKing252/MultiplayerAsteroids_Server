@@ -1,3 +1,4 @@
+from pydoc import cli
 import threading
 import json
 import socket
@@ -10,7 +11,7 @@ matches = []
 clientsConnected = 0
 bulletId = 0
 
-match = {'numBullets': 0 }
+match = {'numBullets': 0, 'numAsteroids': 0 }
 id1 = {}
 id2 = {}
 
@@ -51,6 +52,8 @@ def gameLoop():
             sock.sendto(json.dumps(data).encode('utf-8'), addr)
       
             clientsConnected += 1
+
+            print('hello client')
         # Request matchmaking
         if cmd == 2:
 
@@ -71,7 +74,7 @@ def gameLoop():
                 data = {'commandSignifier': 100, 'message': 'Match has been made!', 'id1': match['client1']['id'], 'id2': match['client2']['id'], 'player': '2' }
                 sock.sendto(json.dumps(data).encode('utf-8'), match['client2']['addr'])
 
-                match = {'numBullets': 0 }
+                match = {'numBullets': 0, 'numAsteroids': 0 }
             else:
                 id2 = {'id': cli_id, 'addr': addr}
                 match['client2'] = id2
@@ -123,7 +126,7 @@ def gameLoop():
                 else:
                     id1 = {}
                     id2 = {}
-                    our_match = {'numBullets': 0}
+                    our_match = {'numBullets': 0, 'numAsteroids': 0}
         # Spawn bullet by client
         elif cmd == 8:
             our_match, idx = getMatchWithId(clientMsg['netId'])
@@ -136,11 +139,11 @@ def gameLoop():
                 
                 sock.sendto(json.dumps(data).encode('utf-8'), addr)
     
-                if clientMsg['playerId'] == 1:
-                    sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
-                elif clientMsg['playerId'] == 2:
-                    sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
-
+                #if clientMsg['playerId'] == 1:
+                sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
+                sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
+                #elif clientMsg['playerId'] == 2:
+                
         # Delete bullet out of bounds, eventually bullets that hit asteroids too.
         elif cmd == 10:            
             our_match, idx = getMatchWithId(clientMsg['netId'])
@@ -153,13 +156,47 @@ def gameLoop():
                     sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
                 elif clientMsg['playerId'] == 2:
                     sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
+        
+        # Spawn asteroid
+        elif cmd == 12:
+            
+            our_match, idx = getMatchWithId(clientMsg['netId'])
+            if our_match != -1:
+                # code here
+                curr_id = our_match['numAsteroids']
+                our_match['numAsteroids'] += 1
+                
+                data = {'commandSignifier': 13, 'netId': clientMsg['netId'], 'playerId': clientMsg['playerId'], 'asteroid': {'id': curr_id, 'pos': clientMsg['asteroid']['pos'], 'vel': clientMsg['asteroid']['vel']}}
+
+                print('asteroid data: ', data)
+                # send to player 1
+                sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
+                
+                # send to player 2
+                sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
+        # Delete asteroid
+        elif cmd == 14:
+            our_match, idx = getMatchWithId(clientMsg['netId'])
+            if our_match != -1:
+                asteroid_id = clientMsg['asteroid']['id']
+                
+                data = { 'commandSignifier': 15, 'netId': asteroid_id, 'playerId': clientMsg['playerId'], 'asteroid': {'id': asteroid_id, 'pos': clientMsg['asteroid']['pos'], 'vel': clientMsg['asteroid']['vel']}}
+                
+                # send to player 1
+                sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
+                
+                # send to player 2
+                sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
+
         mutex.release()
+
 
 
 if __name__ == "__main__":
     mutex = threading.Lock()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(('', 12345))
+    print('starting server...')
+    sock.bind(('', 5491))
 
     serverThread = threading.Thread(target=gameLoop, args=())
 
