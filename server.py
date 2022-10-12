@@ -47,13 +47,11 @@ def gameLoop():
             global id2
             global match
             
-            
             data = { 'commandSignifier': 1, 'id': clientsConnected }
             sock.sendto(json.dumps(data).encode('utf-8'), addr)
       
+            print('client joined with id: ', clientsConnected)
             clientsConnected += 1
-
-            print('hello client')
         # Request matchmaking
         if cmd == 2:
 
@@ -131,18 +129,12 @@ def gameLoop():
         elif cmd == 8:
             our_match, idx = getMatchWithId(clientMsg['netId'])
 
-            if 1 == 1:
-                id = our_match['numBullets']
-                #match['bullets'][id] = { 'pos': clientMsg['pos'], 'vel': clientMsg['vel'] }
-                our_match['numBullets'] += 1
-                data = { 'commandSignifier': 9, 'playerId': clientMsg['playerId'], 'bullet':  {'id': id, 'pos': clientMsg['pos'], 'vel': clientMsg['vel'] }}
-                
-                sock.sendto(json.dumps(data).encode('utf-8'), addr)
-    
-                #if clientMsg['playerId'] == 1:
-                sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
-                sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
-                #elif clientMsg['playerId'] == 2:
+            id = our_match['numBullets']
+            our_match['numBullets'] += 1
+            data = { 'commandSignifier': 9, 'playerId': clientMsg['playerId'], 'bullet':  {'id': id, 'pos': clientMsg['pos'], 'vel': clientMsg['vel'] }}
+            
+            sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
+            sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
                 
         # Delete bullet out of bounds, eventually bullets that hit asteroids too.
         elif cmd == 10:            
@@ -150,12 +142,9 @@ def gameLoop():
             if our_match != -1:
                 bullet_id = clientMsg['bullet']['id']
                 data = {'commandSignifier': 11, 'playerId': clientMsg['playerId'], 'bullet': {'id': bullet_id, 'pos': clientMsg['bullet']['pos'], 'vel': clientMsg['bullet']['vel']}}
-                sock.sendto(json.dumps(data).encode('utf-8'), addr)
-
-                if clientMsg['playerId'] == 1:
-                    sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
-                elif clientMsg['playerId'] == 2:
-                    sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
+                
+                sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
+                sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
         
         # Spawn asteroid
         elif cmd == 12:
@@ -169,10 +158,9 @@ def gameLoop():
                 data = {'commandSignifier': 13, 'netId': clientMsg['netId'], 'playerId': clientMsg['playerId'], 'asteroid': {'id': curr_id, 'pos': clientMsg['asteroid']['pos'], 'vel': clientMsg['asteroid']['vel']}}
 
                 print('asteroid data: ', data)
-                # send to player 1
+
+                # send to players in match
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
-                
-                # send to player 2
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
         # Delete asteroid
         elif cmd == 14:
@@ -180,12 +168,9 @@ def gameLoop():
             if our_match != -1:
                 asteroid_id = clientMsg['asteroid']['id']
                 
-                data = { 'commandSignifier': 15, 'netId': asteroid_id, 'playerId': clientMsg['playerId'], 'asteroid': {'id': asteroid_id, 'pos': clientMsg['asteroid']['pos'], 'vel': clientMsg['asteroid']['vel']}}
+                data = { 'commandSignifier': 15, 'netId': asteroid_id, 'playerId': clientMsg['playerId'], 'deletionFlags': clientMsg['deletionFlags'], 'asteroid': {'id': asteroid_id, 'pos': clientMsg['asteroid']['pos'], 'vel': clientMsg['asteroid']['vel']}}
                 
-                # send to player 1
-                sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
-                
-                # send to player 2
+                # send to players in match
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
 
         mutex.release()
