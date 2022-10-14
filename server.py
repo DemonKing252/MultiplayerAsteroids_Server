@@ -1,8 +1,10 @@
+from cProfile import label
 from pydoc import cli
 import threading
 import json
 import socket
 import time
+import requests
 
 bullets = {}
 clients = {}
@@ -65,7 +67,6 @@ def gameLoop():
                 id1 = {}
                 id2 = {}
                 matches.append(match)
-
                 data = {'commandSignifier': 100, 'message': 'Match has been made!', 'id1': match['client1']['id'], 'id2': match['client2']['id'], 'player': '1' }
                 sock.sendto(json.dumps(data).encode('utf-8'), match['client1']['addr'])
                 
@@ -82,7 +83,57 @@ def gameLoop():
             for i in matches:
                 ids.append(i['client1']['id'])
                 ids.append(i['client2']['id'])
-            print('matches ids: ', ids)  
+            print('matches ids: ', ids)
+
+        # Create account or Login request
+        elif cmd == 50:
+
+            authen = clientMsg['authen']
+            user = clientMsg['user']
+            passw = clientMsg['pass']
+
+
+            # Call the AWS Cloud function that handles account creation
+            # cmd = 0 => Create account
+            # cmd = 1 => Login to account
+            
+            aws_dynamodb_url = 'https://bnych5imfyiq6ry7nnvy7v3oei0bwuic.lambda-url.us-east-2.on.aws/'
+            data = {'commandSignifier': 52, 'response': -1, 'user': user, 'pass': passw }
+
+            if authen == 0: # Create account                                
+                response = requests.get(aws_dynamodb_url, params={'cmd': '0', 'user': user, 'pass': passw})
+                json_str = response.json()
+                resp_status = json_str['response_status']   
+
+                print('create account credentials: ', user, ', pass', passw)       
+
+                if resp_status == 0: # Username taken
+                    data['response'] = 0
+                elif resp_status == 1: # Created successfully
+                    data['response'] = 1
+                else:
+                    print('unknown response status: ', resp_status)
+                
+                sock.sendto(json.dumps(data).encode('utf-8'), addr)
+
+            elif authen == 1: # Login                         
+                response1 = requests.get(aws_dynamodb_url, params={'cmd': '1', 'user': user, 'pass': passw})
+                json_str1 = response1.json()
+                resp_status1 = json_str1['response_status']              
+
+                print('login credentials: ', user, ', pass', passw)
+                if resp_status1 == 2: # Wrong username
+                    data['response'] = 2
+                elif resp_status1 == 3: # Wrong password
+                    data['response'] = 3
+                elif resp_status1 == 4: # Login success
+                    data['response'] = 4
+                else:
+                    print('unknown response status: ', resp_status1)
+                    
+                sock.sendto(json.dumps(data).encode('utf-8'), addr)
+            
+            
         # Position update
         elif cmd == 4: 
             our_match, idx = getMatchWithId(clientMsg['clientId'])
