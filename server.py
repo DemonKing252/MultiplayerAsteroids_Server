@@ -6,16 +6,21 @@ import socket
 import time
 import requests
 
+# Net containeers
 bullets = {}
 clients = {}
 matches = []
+id1 = {}
+id2 = {}
+match = {'numBullets': 0, 'numAsteroids': 0 }
 
+# Net flasgs/states
 clientsConnected = 0
 bulletId = 0
 
-match = {'numBullets': 0, 'numAsteroids': 0 }
-id1 = {}
-id2 = {}
+# Amazon Web Services (AWS) cloud service functions created by Liam Blake
+aws_dynamodb_matchmakingstate_url = 'https://tpoei2enqiqsulkekc2jjczxim0pknjb.lambda-url.us-east-2.on.aws/'
+aws_dynamodb_credentials_url = 'https://bnych5imfyiq6ry7nnvy7v3oei0bwuic.lambda-url.us-east-2.on.aws/'
 
 def getMatchWithId(id):
     global matches
@@ -92,16 +97,14 @@ def gameLoop():
             user = clientMsg['user']
             passw = clientMsg['pass']
 
-
             # Call the AWS Cloud function that handles account creation
             # cmd = 0 => Create account
             # cmd = 1 => Login to account
             
-            aws_dynamodb_url = 'https://bnych5imfyiq6ry7nnvy7v3oei0bwuic.lambda-url.us-east-2.on.aws/'
             data = {'commandSignifier': 52, 'response': -1, 'user': user, 'pass': passw }
 
             if authen == 0: # Create account                                
-                response = requests.get(aws_dynamodb_url, params={'cmd': '0', 'user': user, 'pass': passw})
+                response = requests.get(aws_dynamodb_credentials_url, params={'cmd': '0', 'user': user, 'pass': passw})
                 json_str = response.json()
                 resp_status = json_str['response_status']   
 
@@ -117,20 +120,27 @@ def gameLoop():
                 sock.sendto(json.dumps(data).encode('utf-8'), addr)
 
             elif authen == 1: # Login                         
-                response1 = requests.get(aws_dynamodb_url, params={'cmd': '1', 'user': user, 'pass': passw})
-                json_str1 = response1.json()
-                resp_status1 = json_str1['response_status']              
+                response = requests.get(aws_dynamodb_credentials_url, params={'cmd': '1', 'user': user, 'pass': passw})
+                json_str = response.json()
+                resp_status = json_str['response_status']              
 
                 print('login credentials: ', user, ', pass', passw)
-                if resp_status1 == 2: # Wrong username
+                if resp_status == 2: # Wrong username
                     data['response'] = 2
-                elif resp_status1 == 3: # Wrong password
+                elif resp_status == 3: # Wrong password
                     data['response'] = 3
-                elif resp_status1 == 4: # Login success
+                elif resp_status == 4: # Login success
                     data['response'] = 4
+                elif resp_status == 5: # User is already logged into the server (active)
+                    data['response'] = 5
                 else:
-                    print('unknown response status: ', resp_status1)
-                    
+                    print('unknown response status: ', resp_status)
+
+                if resp_status == 4: # Set the user to be active, so no other client can login with that same account until they log back out.
+                    resp = requests.get(aws_dynamodb_matchmakingstate_url, params={'cmd': '2', 'user': user, 'pass': passw})
+                    resp = resp.json()
+                    print('server response: ', resp)
+
                 sock.sendto(json.dumps(data).encode('utf-8'), addr)
             
             
@@ -162,6 +172,12 @@ def gameLoop():
                 if clients[c]['addr'] == addr:
                     del clients[c]
                     break
+            
+            # For whoever is requesting to drop, 
+            # set their status to be 'offline' on the AWS cloud database
+            response = requests.get(aws_dynamodb_matchmakingstate_url, params={'cmd': '3', 'user': clientMsg['user']}) 
+            response = response.json()
+            print(clientMsg['user'], ': ', response)
             
             our_match, idx = getMatchWithId(clientMsg['netId'])
             if 1 == 1:
@@ -218,10 +234,12 @@ def gameLoop():
             our_match, idx = getMatchWithId(clientMsg['netId'])
             if our_match != -1:
                 asteroid_id = clientMsg['asteroid']['id']
+                print('deleting asteroid (id: ', asteroid_id, ')')
                 
                 data = { 'commandSignifier': 15, 'netId': asteroid_id, 'playerId': clientMsg['playerId'], 'deletionFlags': clientMsg['deletionFlags'], 'asteroid': {'id': asteroid_id, 'pos': clientMsg['asteroid']['pos'], 'vel': clientMsg['asteroid']['vel']}}
                 
                 # send to players in match
+                sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
 
         mutex.release()
