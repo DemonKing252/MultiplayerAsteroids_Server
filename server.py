@@ -1,3 +1,20 @@
+"""
+File: server.py
+Description:
+    Responsible for:
+        - Responding to messages send by client
+        - Sending back messages to clients as needed
+        - User Credentials
+            - Uploading/Retrieving information from my AWS Dyanamo Database
+Author:
+    Liam Blake
+Created: 
+    September 16, 2022
+Modified:
+    October 19, 2022
+
+"""
+
 from cProfile import label
 from pydoc import cli
 import threading
@@ -148,20 +165,19 @@ def gameLoop():
         elif cmd == 4: 
             our_match, idx = getMatchWithId(clientMsg['clientId'])
 
-            if 1 == 1:
-                ids = []
-                for i in matches:
-                    ids.append(i['client1']['id'])
-                    ids.append(i['client2']['id'])
+            ids = []
+            for i in matches:
+                ids.append(i['client1']['id'])
+                ids.append(i['client2']['id'])
 
-                print('matches ids: ', ids)                
+            print('matches ids: ', ids)                
 
-                if clientMsg['playerId'] == 1:
-                    data = {'commandSignifier': 5, 'pos': clientMsg['pos'], 'playerId': 1}
-                    sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
-                else:                
-                    data = {'commandSignifier': 5, 'pos': clientMsg['pos'], 'playerId': 2}
-                    sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
+            if clientMsg['playerId'] == 1:
+                data = {'commandSignifier': 5, 'pos': clientMsg['pos'], 'playerId': 1}
+                sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
+            else:                
+                data = {'commandSignifier': 5, 'pos': clientMsg['pos'], 'playerId': 2}
+                sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
 
         
         # Client dropped
@@ -180,18 +196,18 @@ def gameLoop():
             print(clientMsg['user'], ': ', response)
             
             our_match, idx = getMatchWithId(clientMsg['netId'])
-            if 1 == 1:
-                if our_match != -1: # This was the last match found, so we dont need to tell any clients to disconnect.
-                    if clientMsg['playerId'] == 1:
-                        sock.sendto(json.dumps(dropClient).encode('utf-8'), our_match['client2']['addr'])
-                    elif clientMsg['playerId'] == 2:
-                        sock.sendto(json.dumps(dropClient).encode('utf-8'), our_match['client1']['addr'])
+            
+            if our_match != -1: # This was the last match found, so we dont need to tell any clients to disconnect.
+                if clientMsg['playerId'] == 1:
+                    sock.sendto(json.dumps(dropClient).encode('utf-8'), our_match['client2']['addr'])
+                elif clientMsg['playerId'] == 2:
+                    sock.sendto(json.dumps(dropClient).encode('utf-8'), our_match['client1']['addr'])
 
-                    matches.pop(idx)
-                else:
-                    id1 = {}
-                    id2 = {}
-                    our_match = {'numBullets': 0, 'numAsteroids': 0}
+                matches.pop(idx)
+            else:
+                id1 = {}
+                id2 = {}
+                our_match = {'numBullets': 0, 'numAsteroids': 0}
         # Spawn bullet by client
         elif cmd == 8:
             our_match, idx = getMatchWithId(clientMsg['netId'])
