@@ -23,6 +23,7 @@ import json
 import socket
 import time
 import requests
+import logging
 
 # Net containeers
 bullets = {}
@@ -64,6 +65,7 @@ def gameLoop():
         cmd = clientMsg['commandSignifier']
 
         if cmd == 0:  # Hand shake
+            print('[Server Thread]: client handshake: ', clientMsg)
             clients[clientsConnected] = {}
             clients[clientsConnected]['addr'] = addr
             clients[clientsConnected]['pos'] = { 'x': 0.0, 'y': 0.0 }
@@ -74,15 +76,11 @@ def gameLoop():
             
             data = { 'commandSignifier': 1, 'id': clientsConnected }
             sock.sendto(json.dumps(data).encode('utf-8'), addr)
-      
-            print('client joined with id: ', clientsConnected)
             clientsConnected += 1
         # Request matchmaking
         if cmd == 2:
 
             cli_id = clientMsg['clientId']
-            
-            print('client id joined the match, giving id = ', cli_id)
 
             if 'id' in id2.keys():
                 id1 = {'id': cli_id, 'addr': addr}
@@ -101,12 +99,10 @@ def gameLoop():
                 id2 = {'id': cli_id, 'addr': addr}
                 match['client2'] = id2
 
-                
             ids = []
             for i in matches:
                 ids.append(i['client1']['id'])
                 ids.append(i['client2']['id'])
-            print('matches ids: ', ids)
 
         # Create account or Login request
         elif cmd == 50:
@@ -125,24 +121,17 @@ def gameLoop():
                 response = requests.get(aws_dynamodb_credentials_url, params={'cmd': '0', 'user': user, 'pass': passw})
                 json_str = response.json()
                 resp_status = json_str['response_status']   
-
-                print('create account credentials: ', user, ', pass', passw)       
-
                 if resp_status == 0: # Username taken
                     data['response'] = 0
                 elif resp_status == 1: # Created successfully
                     data['response'] = 1
-                else:
-                    print('unknown response status: ', resp_status)
                 
                 sock.sendto(json.dumps(data).encode('utf-8'), addr)
 
             elif authen == 1: # Login                         
                 response = requests.get(aws_dynamodb_credentials_url, params={'cmd': '1', 'user': user, 'pass': passw})
                 json_str = response.json()
-                resp_status = json_str['response_status']              
-
-                print('login credentials: ', user, ', pass', passw)
+                resp_status = json_str['response_status']
                 if resp_status == 2: # Wrong username
                     data['response'] = 2
                 elif resp_status == 3: # Wrong password
@@ -151,16 +140,12 @@ def gameLoop():
                     data['response'] = 4
                 elif resp_status == 5: # User is already logged into the server (active)
                     data['response'] = 5
-                else:
-                    print('unknown response status: ', resp_status)
 
                 if resp_status == 4: # Set the user to be active, so no other client can login with that same account until they log back out.
                     resp = requests.get(aws_dynamodb_matchmakingstate_url, params={'cmd': '2', 'user': user, 'pass': passw})
                     resp = resp.json()
-                    print('server response: ', resp)
 
                 sock.sendto(json.dumps(data).encode('utf-8'), addr)
-            
             
         # Position update
         elif cmd == 4: 
@@ -173,9 +158,9 @@ def gameLoop():
                 data = {'commandSignifier': 5, 'pos': clientMsg['pos'], 'playerId': 2}
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
 
-        
         # Client dropped
         elif cmd == 6:
+            print('[Server Thread]: client drop: ', clientMsg)
             dropClient = {'commandSignifier': 7, 'id': clientMsg['netId']}
 
             for c in clients.keys():
@@ -187,7 +172,6 @@ def gameLoop():
             # set their status to be 'offline' on the AWS cloud database
             response = requests.get(aws_dynamodb_matchmakingstate_url, params={'cmd': '3', 'user': clientMsg['user']}) 
             response = response.json()
-            print(clientMsg['user'], ': ', response)
             
             our_match, idx = getMatchWithId(clientMsg['netId'])
             
@@ -210,7 +194,7 @@ def gameLoop():
             player_id = clientMsg['playerId']
             data = { 'commandSignifier': 9, 'playerId': player_id, 'ownedByThisClient': False, 'bullet':  {'id': id, 'pos': clientMsg['pos'], 'vel': clientMsg['vel'] }}
             
-            print('del bullet: ', clientMsg)
+            print('[Server Thread]: Spawn bullet: ', clientMsg)
             if player_id == 1:                
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
                 data['ownedByThisClient'] = True
@@ -219,14 +203,11 @@ def gameLoop():
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
                 data['ownedByThisClient'] = True
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
-            else:
-                print('Unknown player id')
-                
         # Delete bullet out of bounds, eventually bullets that hit asteroids too.
         elif cmd == 10:            
             our_match, idx = getMatchWithId(clientMsg['netId'])
             if our_match != -1:
-                print('del bullet: ', clientMsg)
+                print('[Server Thread]: Del bullet: ', clientMsg)
                 bullet_id = clientMsg['bullet']['id']
                 data = {'commandSignifier': 11, 'playerId': clientMsg['playerId'], 'bullet': {'id': bullet_id, 'pos': clientMsg['bullet']['pos'], 'vel': clientMsg['bullet']['vel']}}
                 
@@ -238,7 +219,7 @@ def gameLoop():
             
             our_match, idx = getMatchWithId(clientMsg['netId'])
             if our_match != -1:
-                print('spawn asteroid recv: ', clientMsg)
+                print('[Server Thread]: Spawn asteroid: ', clientMsg)
                 # code here
                 curr_id = our_match['numAsteroids']
                 our_match['numAsteroids'] += 1
@@ -252,14 +233,12 @@ def gameLoop():
                     sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
                     data['ownedByThisClient'] = True
                     sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
-                else:
-                    print('Unknown player id')
 
         # Delete asteroid
         elif cmd == 14:
             our_match, idx = getMatchWithId(clientMsg['netId'])
             if our_match != -1:                
-                print('del asteroid recv: ', clientMsg)                
+                print('[Server Thread]: Del asteroid: ', clientMsg)                
                 asteroid_id = clientMsg['asteroid']['id']
                 data = { 'commandSignifier': 15, 'netId': asteroid_id, 'playerId': clientMsg['playerId'], 'asteroid': {'id': asteroid_id, 'pos': clientMsg['asteroid']['pos'], 'vel': clientMsg['asteroid']['vel']}}
                 
@@ -268,13 +247,23 @@ def gameLoop():
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
         mutex.release()
 
+
+def shutdown_server():
+    # Set all users to be inactive on database
+    resp = requests.get(aws_dynamodb_matchmakingstate_url, params={'cmd': '4'})
+    # Disconnect all clients
+    data = {'commandSignifier': 16}
+    for c in clients.values():
+        sock.sendto(json.dumps(data).encode('utf-8'), c['addr'])
+
 if __name__ == "__main__":
     mutex = threading.Lock()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(('', 5491))
 
-    serverThread = threading.Thread(target=gameLoop, args=())
-
+    # A daemon thread will shut down after the main thread stops
+    serverThread = threading.Thread(target=gameLoop, args=(), daemon=True)
     serverThread.start()
-    serverThread.join()
- 
+
+    x = input('Press any key to stop server...\n')
+    shutdown_server()
