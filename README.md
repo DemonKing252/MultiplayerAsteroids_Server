@@ -1,7 +1,7 @@
 # AWS - (Python 3.9): Amazon Linux Server run on a EC2 instance
 ![1024px-Amazon_Web_Services_Logo svg (1)](https://user-images.githubusercontent.com/46793138/197844527-8bba5ee7-bd19-4c5f-b0bc-471f07bbf490.png)
 AWS | EC2 | DynamoDB | AWS Lambda
-## AWS Features:
+## Core Features:
 - DynamoDB (Non relational database) to store all user names
   - username (string)
   - password (string)
