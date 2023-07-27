@@ -15,16 +15,10 @@ Modified:
 
 """
 
-from cProfile import label
-from http import client
-from pydoc import cli
 import threading
 import json
 import socket
-import time
 import requests
-import logging
-
 # Net containeers
 bullets = {}
 clients = {}
@@ -83,7 +77,8 @@ def gameLoop():
             cli_id = clientMsg['clientId']
 
             if 'id' in id2.keys():
-                id1 = {'id': cli_id, 'addr': addr}
+                # Match has been made
+                id1 = {'id': cli_id, 'addr': addr, 'ready': False}
                 match['client1'] = id1
                 id1 = {}
                 id2 = {}
@@ -96,7 +91,8 @@ def gameLoop():
 
                 match = {'numBullets': 0, 'numAsteroids': 0 }
             else:
-                id2 = {'id': cli_id, 'addr': addr}
+                # Player one match
+                id2 = {'id': cli_id, 'addr': addr, 'ready': False}
                 match['client2'] = id2
 
             ids = []
@@ -245,6 +241,31 @@ def gameLoop():
                 # send to players in match
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
+        
+        # Client ready up
+        elif cmd == 150:
+            our_match, idx = getMatchWithId(clientMsg['NetID'])
+
+            if our_match != -1:
+                
+                if clientMsg['PlayerID'] == 1:
+                    our_match['client1']['ready'] = clientMsg['isReady']
+                elif clientMsg['PlayerID'] == 2:
+                    our_match['client2']['ready'] = clientMsg['isReady']
+
+                print('client ready up at with net id: ', our_match)
+
+                if our_match['client1']['ready'] == True and our_match['client2']['ready'] == True:
+                    print('both clients are ready, switching game states...')
+                    
+                    data = {'commandSignifier': 102, 'message': 'Match has been made!', 'id1': our_match['client1']['id'], 'id2': our_match['client2']['id'], 'player': '1' }
+                    sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
+                                
+                    data = {'commandSignifier': 102, 'message': 'Match has been made!', 'id1': our_match['client1']['id'], 'id2': our_match['client2']['id'], 'player': '2' }
+                    sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
+
+
+        
         mutex.release()
 
 
