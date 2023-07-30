@@ -34,6 +34,7 @@ bulletId = 0
 # Amazon Web Services (AWS) cloud service functions created by Liam Blake
 aws_dynamodb_matchmakingstate_url = 'https://tpoei2enqiqsulkekc2jjczxim0pknjb.lambda-url.us-east-2.on.aws/'
 aws_dynamodb_credentials_url = 'https://bnych5imfyiq6ry7nnvy7v3oei0bwuic.lambda-url.us-east-2.on.aws/'
+aws_dynamodb_playerstats_url = 'https://v5fwtyntfunhdpxy6xxcezisju0ecwjb.lambda-url.us-east-2.on.aws/'
 
 def getMatchWithId(id):
     global matches
@@ -76,6 +77,8 @@ def gameLoop():
 
             cli_id = clientMsg['clientId']
 
+            # Update time played
+
             if 'id' in id2.keys():
                 # Match has been made
                 id1 = {'id': cli_id, 'addr': addr, 'ready': False}
@@ -111,7 +114,7 @@ def gameLoop():
             # cmd = 0 => Create account
             # cmd = 1 => Login to account
             
-            data = {'commandSignifier': 52, 'response': -1, 'user': user, 'pass': passw }
+            data = {'commandSignifier': 52, 'response': -1, 'user': user, 'pass': passw, 'highScore': '0', 'timePlayed': '0' }
 
             if authen == 0: # Create account                                
                 response = requests.get(aws_dynamodb_credentials_url, params={'cmd': '0', 'user': user, 'pass': passw})
@@ -141,6 +144,12 @@ def gameLoop():
                     resp = requests.get(aws_dynamodb_matchmakingstate_url, params={'cmd': '2', 'user': user, 'pass': passw})
                     resp = resp.json()
 
+                    response = requests.get(aws_dynamodb_playerstats_url, params={'cmd': '1', 'user': user})
+                    response = response.json()
+
+                    data['highScore'] = int(response['highScore'])
+                    data['timePlayed'] = float(response['timePlayed'])
+
                 sock.sendto(json.dumps(data).encode('utf-8'), addr)
             
         # Position update
@@ -157,6 +166,7 @@ def gameLoop():
         # Client dropped
         elif cmd == 6:
             print('[Server Thread]: client drop: ', clientMsg)
+            print('network up time: ', clientMsg['networkUpTime'])
             dropClient = {'commandSignifier': 7, 'id': clientMsg['netId']}
 
             for c in clients.keys():
@@ -167,6 +177,10 @@ def gameLoop():
             # For whoever is requesting to drop, 
             # set their status to be 'offline' on the AWS cloud database
             response = requests.get(aws_dynamodb_matchmakingstate_url, params={'cmd': '3', 'user': clientMsg['user']}) 
+            response = response.json()
+
+            # Update time played
+            response = requests.get(aws_dynamodb_playerstats_url, params={'cmd': '0', 'user': clientMsg['user'], 'timePlayed': clientMsg['networkUpTime'], 'highScore': clientMsg['highScore']})
             response = response.json()
             
             our_match, idx = getMatchWithId(clientMsg['netId'])
@@ -191,11 +205,13 @@ def gameLoop():
             data = { 'commandSignifier': 9, 'playerId': player_id, 'ownedByThisClient': False, 'bullet':  {'id': id, 'pos': clientMsg['pos'], 'vel': clientMsg['vel'] }}
             
             print('[Server Thread]: Spawn bullet: ', clientMsg)
-            if player_id == 1:                
+            if player_id == 1:               
+                data['ownedByThisClient'] = False
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
                 data['ownedByThisClient'] = True
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
             elif player_id == 2:
+                data['ownedByThisClient'] = False
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
                 data['ownedByThisClient'] = True
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
@@ -242,6 +258,13 @@ def gameLoop():
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client1']['addr'])
                 sock.sendto(json.dumps(data).encode('utf-8'), our_match['client2']['addr'])
         
+        # Re roll match
+        elif cmd == 101:
+            print('re rolling match, up time was: ', clientMsg['networkUpTime'])
+            
+            response = requests.get(aws_dynamodb_playerstats_url, params={'cmd': '0', 'user': clientMsg['user'], 'timePlayed': clientMsg['networkUpTime'], 'highScore': clientMsg['highScore']})
+            response = response.json()
+
         # Client ready up
         elif cmd == 150:
             our_match, idx = getMatchWithId(clientMsg['NetID'])
